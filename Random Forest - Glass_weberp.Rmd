@@ -1,0 +1,396 @@
+---
+title: "Random Forests - Glass"
+author: "Patric Oliver Weber"
+date: "November 25, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Random Forest Classification on Glass dataset from UCI
+
+## Description
+
+This data set contains the description of 214 fragments of glass originally collected for a study in the context of criminal investigation. Each fragment has a measured reflectivity index and chemical composition (weight percent of Na, Mg, Al, Si, K, Ca, Ba and Fe). 
+
+As suggested by Ripley (1994), 29 instances were discarded, and the remaining 185 were re-grouped in four classes: window float glass (70), window non-float glass (76), vehicle window glass (17) and other (22).
+
+## Attributes
+Id: 1 to 214 (removed from CSV file)
+RI: refractive index
+Na: Sodium (unit measurement: weight percent in corresponding oxide, as are attributes 4-10)
+Mg: Magnesium
+Al: Aluminum
+Si: Silicon
+K: Potassium
+Ca: Calcium
+Ba: Barium
+Fe: Iron
+Type of glass: (Class Attribute)
+1 - building_windows_float_processed
+2 - building_windows_non_float_processed
+3 - vehicle_windows_float_processed
+4 - vehicle_windows_non_float_processed (none in this database)
+5 - containers
+6 - tableware
+7 - headlamps
+
+---------------------------------------------------------------------------
+# Environment Installation
+
+In this section we are going to install all relevant libraries
+
+```{r}
+#install.packages('caTools')  # Create Trainig and Testing dataset (SPLIT)
+#install.packages('dplyr')    #for Data Manipulation
+#install.packages('ggplot2')  #for Data Visualization
+#install.packages('caret')    #Confusion Matrix
+#install.packages('corrplot') #Correlation Plot
+#install.packages('randomForest') #for RandomForest Algorithm 
+#install.packages('mlbench') #for Glass Dataset # However will here not be used dataset could be load: Data('Glass') with predefined x & y values.
+```
+
+Activate the Libraries
+
+```{r}
+library(caTools)
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(corrplot)
+# library(mlbench)
+```
+
+## Load the Dataset from UCI directly
+
+```{r}
+dataset <- read.csv("https://archive.ics.uci.edu/ml/machine-learning-databases/glass/glass.data",
+                      col.names=c("RI","Na","Mg","Al","Si","K","Ca","Ba","Fe","Type"))
+```
+
+-----------------------------------------------------------------------------
+# Data Understanding
+
+With the following comand I will explore the dataset
+```{r}
+str(dataset)# it will return a data.frame with four columns: variable , class , levels , and examples
+summary(dataset) #Shows the quartils and Median --> good for skewness
+anyNA(dataset) #Check if there are missing Values
+anyDuplicated(dataset) #Check if there are duplicated rows in the dataset.
+```
+
+## Data Visualisation
+
+```{r}
+corrplot(cor(dataset))
+```
+Accrording to the independent Variables Ca shares a high correlation with RI while si correlates negatiely.
+When we look at the Target Value, we see that Magnesium shares a negative corrleation while Na, AI and Ba are positively correlated. 
+
+This exploration has shown us great insight into the data, but let's move on on the data preprocessing stage.
+
+
+-------------------------------------------------------------------------------------
+# Data Preprocessing
+
+## Taking care of missing Data
+```{r}
+anyNA(dataset) #Check if there are missing Values
+
+# An example of replacing a missing data with an average value Ri
+#dataset$RI = ifelse(is.na(dataset$RI),
+#  ave(dataset$RI, FUN = function(x) mean(x, na.rm =TRUE)),
+#  dataset$RI                    
+# )
+```
+
+## Taking care of duplicates
+
+```{r}
+anyDuplicated(dataset) #Check if there are duplicated rows in the dataset.
+
+dataset <- dataset[!duplicated(dataset),] # Remove duplicates
+```
+
+#Encoding categorical data
+
+It's improtant to find our when do encoding. This clearly depends on the machine learning algorihm you're using. For a decision tree, we can encode ordinal values, but for algorithm that learns a weight for each variable encoding should not be applied. For further Information: https://forums.fast.ai/t/to-label-encode-or-one-hot-encode/6057/5
+
+```{r}
+# dataset$Gender = factor(dataset$Gender,
+                      #  levels = c('Male', 'Female'),
+                      #  labels = c(0,1))
+```
+
+--------------------------------------------
+## Encoding the target feature as factor
+
+```{r}
+dataset$Type <- as.factor(dataset$Type)
+table(dataset$Type)
+# Levels =c(0,1) could also be included
+
+```
+
+--------------------------------------------
+## Feature Scaling
+
+```{r}
+dataset[, 1:9] = scale(dataset[, 1:9])
+#must be numeric, but we created Factors we have to exclude these things. 
+#Check if there are any missing values to impute. 
+```
+
+--------------------------------------------------------------------------------------
+# Modelling Random Forest Classification
+
+
+## Splitting the dataset into the Training and Test set
+
+```{r}
+# install.packages('caTools') if not beeing implementet at start these packages would go here!
+# library(caTools)
+set.seed(123)
+split = sample.split(dataset$Type, SplitRatio = 0.8) #For Training Set
+# with split you can se how the rows were splitted
+train_set = subset(dataset, split == TRUE)
+test_set = subset(dataset, split == FALSE)
+```
+
+-------------------------------------------
+## Fitting Random Forest Classification
+
+This represents the first dummy step without special indicators.
+
+```{r}
+# install.packages('randomForest') #Install for the first time
+# library(randomForest)
+set.seed(123)
+classifier = randomForest(x = train_set[,-10], 
+                          y = train_set$Type)
+
+
+print(classifier)
+attributes(classifier)
+classifier$confusion
+```
+The first thing to note here it the OOB, called the out of bag error is approximately 21%. Eventually hit rate is 79%. At a closer look we see that the algorithm does not a good job identifying Class 3 and 6.
+
+
+--------------------------------------------------------------------------------------
+# Evaluation
+
+
+---------------------------------------------
+# Prediction & Confusion Matrix on Training Set
+
+```{r}
+# install.packages('caret') 
+# library(caret)
+X_pred <- predict(classifier, train_set[-10])
+#head(p1)
+#head(train_set$Purchased)
+table(train_set$Type)
+confusionMatrix(X_pred, train_set$Type)
+```
+
+---------------------------------------------
+# Prediction & Confusion Matrix on Test Set
+
+```{r}
+y_pred <- predict(classifier, newdata = test_set[-10])
+confusionMatrix(y_pred, test_set$Type)
+# plot(test_set$Type)
+```
+Accoring to the results above, the test accuracy is better that the predicted out of bag error in Model section. However, there are also some class errors as well. 
+
+---------------------------------------------
+# Error rate of Random Forest
+
+```{r}
+plot(classifier) #a one liner with no legend
+
+oob.error.rate <- data.frame(
+  Trees=rep(1:nrow(classifier$err.rate), times=7),
+  Type=rep(c("OOB", "1", "2","3","5","6","7"), each=nrow(classifier$err.rate)),
+  Error=c(classifier$err.rate[,"OOB"],
+    classifier$err.rate[,"1"],
+    classifier$err.rate[,"2"],
+    classifier$err.rate[,"3"],
+    classifier$err.rate[,"5"],
+    classifier$err.rate[,"6"],
+    classifier$err.rate[,"7"]))
+ 
+ggplot(data=oob.error.rate, aes(x=Trees, y=Error)) +
+  geom_line(aes(color=Type))
+```
+With the plot on the left we can see as the number of tree grows the less error we get. Furthermore, we can identify where we have to stop the forest. This figure shows that we might can increase the number of trees to lower the error rate on class tree. 
+Let's try a larger amount of trees ans also somwhere around 275 trees.
+
+
+
+----------------------------------------------
+# No. of nodes for the trees
+
+```{r}
+hist(treesize(classifier),
+  main ="No. of Nodes for the Trees",
+  col = "green")
+```
+
+#Feature Selection of Variable Importance
+
+```{r}
+varImpPlot(classifier)
+importance(classifier)
+```
+
+
+--------------------------------------------------------------
+#Partial Dependence Plot
+
+Partial dependence plot gives a graphical depiction of the marginal effect of a variable on the class probability (classification) or response (regression).
+
+```{r}
+partialPlot(classifier, train_set , Al, "1")
+partialPlot(classifier, train_set , Al, "2")
+partialPlot(classifier, train_set , Al, "3")
+partialPlot(classifier, train_set , Al, "5")
+partialPlot(classifier, train_set , Al, "6")
+partialPlot(classifier, train_set , Al, "7")
+```
+You can see that Variable Al in Class 1. IF Al is less than 1 it tends to predict class 1.
+
+```{r}
+partialPlot(classifier, train_set , Mg, "1")
+partialPlot(classifier, train_set , Mg, "2")
+partialPlot(classifier, train_set , Mg, "3")
+partialPlot(classifier, train_set , Mg, "5")
+partialPlot(classifier, train_set , Mg, "6")
+partialPlot(classifier, train_set , Mg, "7")
+```
+if Mg is less than 0, it tends to predict Class 5
+
+```{r}
+partialPlot(classifier, train_set , RI, "1")
+partialPlot(classifier, train_set , RI, "2")
+partialPlot(classifier, train_set , RI, "3")
+partialPlot(classifier, train_set , RI, "5")
+partialPlot(classifier, train_set , RI, "6")
+partialPlot(classifier, train_set , RI, "7")
+```
+
+
+--------------------------------------------------------------------------------------
+# Tune Random Forest Model
+
+In this section we will look into tree methods that can be used for tune the parameters, namely:
+
+- Using tools that come with the algorithm
+- Using the caret R package
+- Designing your own parameter search
+
+
+## Tune Random Forest
+
+```{r}
+t <- tuneRF(train_set[,-10], train_set[,10],
+       stepFactor = 0.5,
+       plot = TRUE,
+       ntreeTry = 2000,
+       trace = TRUE,
+       improve = 0.01)
+
+```
+
+--------------------------------------------------
+## Iterate trough the model
+
+```{r}
+oobvalues <- vector(length=10)
+for(i in 1:10) {
+  tempmodel <- randomForest(x = train_set[,-10], 
+                          y = train_set$Type,
+                          ntree = 2000,
+                          mtry = i)
+    oobvalues[i] <- tempmodel$err.rate[nrow(tempmodel$err.rate),1]
+}
+oobvalues
+plot(oobvalues)
+```
+
+-----------------------------------------------------------------------
+## Apply it to the Random Forest Model
+
+```{r}
+set.seed(123)
+classifierT = randomForest(x = train_set[,-10], 
+                          y = train_set$Type,
+                          ntree = 300,
+                          mtry = 3,
+                          importance = TRUE,
+                          proximity = TRUE)
+                          
+print(classifierT) #Print the Confusion Matrix
+varImpPlot(classifierT) # Creates the VarImPlot
+importance(classifierT)
+
+```
+
+-----------------------------------------------------------------------
+#Multi-dimensional Scaling Plot of Proximity Matrix
+
+```{r}
+MDSplot(classifierT, train_set$Type) #shows distances among the samples
+```
+
+------------------------------------------------------------------------------------------------------
+## Appendix
+
+Tune Algorithm by useing Caret in R
+
+
+# Create this own testings algorithms....
+```{r}
+#Declare Variables
+
+x <- dataset[,1:9]
+y <- dataset[,10]
+
+control <- trainControl(method="repeatedcv", number=10, repeats=3)
+seed <- 7
+metric <- "Accuracy"
+set.seed(seed)
+mtry <- sqrt(ncol(x))
+tunegrid <- expand.grid(.mtry=mtry)
+defaultRF <- train(Type~., data=dataset, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
+print(defaultRF)
+
+```
+
+# Random Search
+
+```{r}
+# Random Search
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search="random")
+set.seed(seed)
+mtry <- sqrt(ncol(x))
+rf_random <- train(Type~., data=dataset, method="rf", metric=metric, tuneLength=15, trControl=control)
+print(rf_random)
+plot(rf_random)
+```
+
+
+#Grid Search
+
+```{r}
+control <- trainControl(method="repeatedcv", number=10, repeats=3, search="grid")
+set.seed(seed)
+tunegrid <- expand.grid(.mtry=c(1:15))
+rf_gridsearch <- train(Type~., data=dataset, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control)
+print(rf_gridsearch)
+plot(rf_gridsearch)
+```
